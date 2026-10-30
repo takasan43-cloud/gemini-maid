@@ -33,7 +33,7 @@ jobs:
             const apiKey = process.env.GEMINI_API_KEY;
             const title = process.env.ISSUE_TITLE || 'Webサイト';
             const body = process.env.ISSUE_BODY || 'モダンなWebサイトを作ってください';
-            const prompt = `あなたはプロのWebエンジニアです。以下の要望に基づいて、そのままブラウザで表示できる綺麗でモダンな1枚のHTMLファイル（CSSやJavaScriptも含む）を作成してください。余計な解説は不要で、必ずHTMLのコードのみ（またはコードブロック形式）で出力してください。\n\n要望タイトル: ${title}\n詳細: ${body}`;
+            const prompt = `あなたはプロのWebエンジニアです。以下の要望に基づいて、そのままブラウザで表示できる綺麗でモダンな1枚のHTMLファイル（CSSやJavaScriptも含む）を作成してください。必ずHTMLのコードブロック（\`\`\`html ... \`\`\`）形式で出力してください。\n\n要望タイトル: ${title}\n詳細: ${body}`;
 
             const data = JSON.stringify({
               contents: [{
@@ -43,7 +43,7 @@ jobs:
 
             const options = {
               hostname: 'generativelanguage.googleapis.com',
-              path: `/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+              path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -62,12 +62,12 @@ jobs:
                     
                     if (!json.candidates || json.candidates.length === 0) {
                       console.error('API Error Response:', responseData);
-                      throw new Error('Gemini API returned no candidates. Check your API key or prompt.');
+                      throw new Error('Gemini API returned no candidates. Raw response logged above.');
                     }
 
                     const text = json.candidates[0].content.parts[0].text;
                     
-                    // HTMLコードブロックの抽出、なければそのまま
+                    // HTMLコードブロックの抽出
                     const match = text.match(/```html([\s\S]*?)```/) || text.match(/```([\s\S]*?)```/);
                     const htmlContent = match ? match[1].trim() : text;
 
