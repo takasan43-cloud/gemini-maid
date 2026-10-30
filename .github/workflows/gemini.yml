@@ -7,12 +7,80 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Call Gemini API
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Web Page with Gemini API
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const https = require('https');
+            const fs = require('fs');
+
+            const apiKey = process.env.GEMINI_API_KEY;
+            const title = process.env.ISSUE_TITLE || '';
+            const body = process.env.ISSUE_BODY || '';
+            const prompt = `あなたはプロのWebエンジニアです。以下の要望に基づいて、そのままブラウザで表示できる綺麗でモダンな1枚のHTMLファイル（CSSやJavaScriptも含む）をコードブロック（\`\`\`html ... \`\`\`）形式で作成してください。\n\n要望タイトル: ${title}\n詳細: ${body}`;
+
+            const data = JSON.stringify({
+              contents: [{
+                parts: [{ text: prompt }]
+              }]
+            });
+
+            const options = {
+              hostname: 'generativelanguage.googleapis.com',
+              path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': data.length
+              }
+            };
+
+            await new Promise((resolve, reject) => {
+              const req = https.request(options, (res) => {
+                let responseData = '';
+                res.on('data', (chunk) => { responseData += chunk; });
+                res.on('end', () => {
+                  try {
+                    const json = JSON.parse(responseData);
+                    const text = json.candidates[0].content.parts[0].text;
+                    
+                    // HTMLコードブロックの抽出
+                    const match = text.match(/```html([\s\S]*?)```/) || text.match(/```([\s\S]*?)```/);
+                    const htmlContent = match ? match[1].trim() : text;
+
+                    fs.writeFileSync('index.html', htmlContent);
+                    console.log('Successfully generated index.html!');
+                    resolve();
+                  } catch (e) {
+                    reject(e);
+                  }
+                });
+              });
+              req.on('error', reject);
+              req.write(data);
+              req.end();
+            });
+
+      - name: Commit and Push index.html
         run: |
-          echo "Gemini is ready to build!"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Auto-generate web page via Gemini API" || exit 0
+          git push
